@@ -7,7 +7,6 @@ from threading import Thread
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # === 🔑 Настройки ===
-# Токен берётся из переменной окружения BOT_TOKEN (Render → Environment Variables)
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("❌ BOT_TOKEN не найден в переменных окружения!")
@@ -19,27 +18,8 @@ players_by_date = {}   # словарь: дата → [игроки]
 pending_date = {}      # словарь: user_id → True (ожидаем дату от пользователя)
 
 
-# === 🚀 Команда /start ===
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(
-        message.chat.id,
-        "👋 Привет! Напиши дату предстоящей игры (например: Пятница 25.10):"
-    )
-    pending_date[message.from_user.id] = True  # ожидаем дату от этого пользователя
-
-
-# === 📅 Получение даты ===
-@bot.message_handler(func=lambda m: pending_date.get(m.from_user.id))
-def get_date(message):
-    date_text = message.text.strip() if message.text else "неизвестная дата"
-    pending_date.pop(message.from_user.id, None)
-
-    # создаём запись, если даты ещё нет
-    if date_text not in players_by_date:
-        players_by_date[date_text] = []
-
-    # создаём кнопки
+# === 🧩 Общая функция для вывода клавиатуры ===
+def send_date_message(chat_id, date_text):
     markup = types.InlineKeyboardMarkup()
     join_btn = types.InlineKeyboardButton("Играю 🎾", callback_data=f"join|{date_text}")
     show_btn = types.InlineKeyboardButton("Список 📋", callback_data=f"show|{date_text}")
@@ -47,11 +27,44 @@ def get_date(message):
     markup.add(join_btn, show_btn, draw_btn)
 
     bot.send_message(
-        message.chat.id,
+        chat_id,
         f"📢 Объявление: Теннис в {date_text}!\n"
         f"Нажмите кнопки, чтобы записаться или посмотреть список игроков.",
         reply_markup=markup
     )
+
+
+# === 🚀 Команда /start ===
+@bot.message_handler(commands=['start'])
+def start(message):
+    # Разделяем /start и текст (если он есть)
+    parts = message.text.split(maxsplit=1)
+
+    if len(parts) > 1:
+        # Пользователь написал /start с датой
+        date_text = parts[1].strip()
+        if date_text not in players_by_date:
+            players_by_date[date_text] = []
+        send_date_message(message.chat.id, date_text)
+    else:
+        # Если дату не указали — просим ввести вручную
+        bot.send_message(
+            message.chat.id,
+            "👋 Привет! Напиши дату предстоящей игры (например: Пятница 25.10):"
+        )
+        pending_date[message.from_user.id] = True
+
+
+# === 📅 Получение даты вручную ===
+@bot.message_handler(func=lambda m: pending_date.get(m.from_user.id))
+def get_date(message):
+    date_text = message.text.strip() if message.text else "неизвестная дата"
+    pending_date.pop(message.from_user.id, None)
+
+    if date_text not in players_by_date:
+        players_by_date[date_text] = []
+
+    send_date_message(message.chat.id, date_text)
 
 
 # === 🎾 Обработка кнопок ===
@@ -63,7 +76,7 @@ def callback(call):
         bot.answer_callback_query(call.id, "Некорректные данные.")
         return
 
-    user = call.from_user.first_name
+    user = call.from_user.username or call.from_user.first_name
     players = players_by_date.setdefault(date_text, [])
 
     if action == "join":
@@ -112,7 +125,7 @@ Thread(target=run_server, daemon=True).start()
 # === ▶️ Запуск Telegram-бота ===
 if __name__ == "__main__":
     print("✅ Starting bot... Waiting 3 seconds before polling to avoid conflicts.")
-    time.sleep(3)  # защита от двойного запуска Render
+    time.sleep(3)
     try:
         print("🤖 Bot is running...")
         bot.polling(none_stop=True, interval=2, timeout=20)
