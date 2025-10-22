@@ -2,11 +2,16 @@ import telebot
 from telebot import types
 import random
 import os
+import time
 from threading import Thread
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # === 🔑 Настройки ===
-TOKEN = os.getenv("BOT_TOKEN", "PASTE_YOUR_TOKEN_HERE")
+# Токен берётся из переменной окружения BOT_TOKEN (Render → Environment Variables)
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN не найден в переменных окружения!")
+
 bot = telebot.TeleBot(TOKEN)
 
 # === 📋 Данные ===
@@ -28,9 +33,9 @@ def start(message):
 @bot.message_handler(func=lambda m: pending_date.get(m.from_user.id))
 def get_date(message):
     date_text = message.text.strip() if message.text else "неизвестная дата"
-    pending_date.pop(message.from_user.id, None)  # убираем из ожидания
+    pending_date.pop(message.from_user.id, None)
 
-    # если такой даты ещё нет — создаём запись
+    # создаём запись, если даты ещё нет
     if date_text not in players_by_date:
         players_by_date[date_text] = []
 
@@ -103,6 +108,13 @@ def run_server():
 
 Thread(target=run_server, daemon=True).start()
 
+
 # === ▶️ Запуск Telegram-бота ===
-print("✅ Bot is running...")
-bot.polling(none_stop=True)
+if __name__ == "__main__":
+    print("✅ Starting bot... Waiting 3 seconds before polling to avoid conflicts.")
+    time.sleep(3)  # защита от двойного запуска Render
+    try:
+        print("🤖 Bot is running...")
+        bot.polling(none_stop=True, interval=2, timeout=20)
+    except Exception as e:
+        print(f"❌ Ошибка при запуске бота: {e}")
