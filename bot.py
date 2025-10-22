@@ -3,22 +3,23 @@ from telebot import types
 import random
 import os
 
-# 🔒 Лучше хранить токен в переменной окружения (а не прямо в коде)
 TOKEN = os.getenv("BOT_TOKEN", "PASTE_YOUR_TOKEN_HERE")
-
 bot = telebot.TeleBot(TOKEN)
 
 players = []
+pending_date = {}  # словарь: user_id → ждём дату
 
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Получаем дату из команды /start, например: /start Пятница 25.10
-    args = message.text.split(maxsplit=1)
-    if len(args) > 1:
-        date_text = args[1]
-    else:
-        date_text = "субботу 20.10"  # значение по умолчанию
+    bot.send_message(message.chat.id, "👋 Привет! Напиши дату предстоящей игры (например: Пятница 25.10):")
+    pending_date[message.chat.id] = True  # отмечаем, что ждём дату
+
+
+@bot.message_handler(func=lambda m: m.chat.id in pending_date)
+def get_date(message):
+    date_text = message.text.strip()
+    del pending_date[message.chat.id]  # больше не ждём
 
     markup = types.InlineKeyboardMarkup()
     join_btn = types.InlineKeyboardButton("Играю 🎾", callback_data="join")
@@ -28,7 +29,7 @@ def start(message):
 
     bot.send_message(
         message.chat.id,
-        f"📢 Объявление: Теннис в {date_text}!\nНажмите кнопки, чтобы голосовать за участие.",
+        f"📢 Объявление: Теннис в {date_text}!\nНажмите кнопки, чтобы записаться или посмотреть список.",
         reply_markup=markup
     )
 
