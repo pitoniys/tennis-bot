@@ -2,6 +2,8 @@ import telebot
 from telebot import types
 import random
 import os
+from threading import Thread
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 TOKEN = os.getenv("BOT_TOKEN", "PASTE_YOUR_TOKEN_HERE")
 bot = telebot.TeleBot(TOKEN)
@@ -12,7 +14,10 @@ pending_date = {}  # словарь: user_id → ждём дату
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "👋 Привет! Напиши дату предстоящей игры (например: Пятница 25.10):")
+    bot.send_message(
+        message.chat.id,
+        "👋 Привет! Напиши дату предстоящей игры (например: Пятница 25.10):"
+    )
     pending_date[message.chat.id] = True  # отмечаем, что ждём дату
 
 
@@ -58,5 +63,22 @@ def callback(call):
             bot.send_message(call.message.chat.id, "🎾 Сегодня играют:\n" + "\n".join(selected))
 
 
+# === 🔥 Фейковый HTTP-сервер для Render (чтобы не выключался) ===
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    print(f"🌐 Web server running on port {port}")
+    server.serve_forever()
+
+# Запускаем HTTP сервер в отдельном потоке
+Thread(target=run_server, daemon=True).start()
+
+# === Запуск Telegram-бота ===
 print("✅ Bot is running...")
 bot.polling(none_stop=True)
